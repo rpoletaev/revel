@@ -3,6 +3,7 @@ package revel
 import (
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"sort"
@@ -10,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 )
 
 var (
@@ -19,6 +20,11 @@ var (
 	MainWatcher        *Watcher
 	Server             *http.Server
 )
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
 
 // This method handles all requests.  It dispatches to handleInternal after
 // handling / adapting websocket connections.
@@ -29,12 +35,18 @@ func handle(w http.ResponseWriter, r *http.Request) {
 
 	upgrade := r.Header.Get("Upgrade")
 	if upgrade == "websocket" || upgrade == "Websocket" {
-		websocket.Handler(func(ws *websocket.Conn) {
-			//Override default Read/Write timeout with sane value for a web socket request
-			ws.SetDeadline(time.Now().Add(time.Hour * 24))
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			log.Println("CONNECTION ESTABLISHED")
 			r.Method = "WS"
-			handleInternal(w, r, ws)
+			handleInternal(w, r, conn)
 		}).ServeHTTP(w, r)
+
 	} else {
 		handleInternal(w, r, nil)
 	}
